@@ -323,6 +323,18 @@ export function BulkImageUploadModal({
 
   const uploadable = rows.filter((r) => r.target.kind !== 'skip');
 
+  // Silver/white products blend with light backgrounds, so we never auto-remove
+  // their background (do it manually, then upload the already-transparent PNG).
+  const isSilverRow = (row: FileRow): boolean => {
+    const re = /silver|فضي/i;
+    let color = '';
+    if (row.target.kind === 'variant') {
+      const vid = row.target.variantId;
+      color = variants.find((v) => v.id === vid)?.color_en ?? '';
+    }
+    return re.test(color) || re.test(row.file.name);
+  };
+
   const onConfirm = async () => {
     const toUpload = rows.filter((r) => r.target.kind !== 'skip');
     if (toUpload.length === 0) return;
@@ -340,7 +352,7 @@ export function BulkImageUploadModal({
         let ext = row.file.name.split('.').pop()?.toLowerCase() ?? 'png';
         let mime = row.file.type;
         try {
-          uploadBlob = await normalizeImage(row.file, removeBg);
+          uploadBlob = await normalizeImage(row.file, removeBg && !isSilverRow(row));
           ext = 'webp';
           mime = 'image/webp';
         } catch {
@@ -427,7 +439,11 @@ export function BulkImageUploadModal({
                 onChange={(e) => setRemoveBg(e.target.checked)}
                 className="h-4 w-4 accent-yellow-400"
               />
-              <span>{dir === 'rtl' ? 'إزالة الخلفية تلقائياً' : 'Remove background automatically'}</span>
+              <span>
+                {dir === 'rtl'
+                  ? 'إزالة الخلفية تلقائياً (الفضي يتخطى تلقائياً)'
+                  : 'Remove background automatically (silver is skipped)'}
+              </span>
             </label>
 
             <div
