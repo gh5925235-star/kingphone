@@ -36,7 +36,9 @@ function colorNormalize(s: string): string {
 // ---------------------------------------------------------------------------
 const OUT_SIZE = 1000;
 const OUT_PADDING = 0.08;
-const BG_TOLERANCE = 38;
+const BG_TOLERANCE = 12; // was 38: too loose, leaked into light/silver products
+const BG_STEP = 5; // max color jump between neighbouring pixels while flooding
+const MAX_REMOVED = 0.7; // if more than 70% would be removed, assume it ate the product
 
 function colorDist(d: Uint8ClampedArray, i: number, r: number, g: number, b: number): number {
   const dr = d[i] - r;
@@ -63,37 +65,48 @@ function removeEdgeBackground(d: Uint8ClampedArray, w: number, h: number): void 
 
   const visited = new Uint8Array(w * h);
   const stack: number[] = [];
-  const push = (x: number, y: number) => {
+  const toClear: number[] = [];
+
+  const push = (x: number, y: number, from: number) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return;
     const p = y * w + x;
     if (visited[p]) return;
     if (colorDist(d, p * 4, r, g, b) > BG_TOLERANCE) return;
+    // do not cross gradients (the edge of the product)
+    if (from >= 0) {
+      const f = from * 4;
+      if (colorDist(d, p * 4, d[f], d[f + 1], d[f + 2]) > BG_STEP) return;
+    }
     visited[p] = 1;
     stack.push(p);
   };
 
   for (let x = 0; x < w; x++) {
-    push(x, 0);
-    push(x, h - 1);
+    push(x, 0, -1);
+    push(x, h - 1, -1);
   }
   for (let y = 0; y < h; y++) {
-    push(0, y);
-    push(w - 1, y);
+    push(0, y, -1);
+    push(w - 1, y, -1);
   }
 
   while (stack.length) {
     const p = stack.pop()!;
-    d[p * 4 + 3] = 0;
+    toClear.push(p);
     const x = p % w;
     const y = (p - x) / w;
-    push(x + 1, y);
-    push(x - 1, y);
-    push(x, y + 1);
-    push(x, y - 1);
+    push(x + 1, y, p);
+    push(x - 1, y, p);
+    push(x, y + 1, p);
+    push(x, y - 1, p);
   }
+
+  // Safety: if most of the image would vanish, keep the original untouched.
+  if (toClear.length / (w * h) > MAX_REMOVED) return;
+  for (const p of toClear) d[p * 4 + 3] = 0;
 }
 
-async function normalizeImage(file: File): Promise<Blob> {
+async function normalizeImage(file: File, removeBg: boolean): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const shrink = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * shrink));
@@ -106,8 +119,10 @@ async function normalizeImage(file: File): Promise<Blob> {
   wctx.drawImage(bitmap, 0, 0, w, h);
 
   const imgData = wctx.getImageData(0, 0, w, h);
-  removeEdgeBackground(imgData.data, w, h);
-  wctx.putImageData(imgData, 0, 0);
+  if (removeBg) {
+    removeEdgeBackground(imgData.data, w, h);
+    wctx.putImageData(imgData, 0, 0);
+  }
 
   const d = imgData.data;
   let minX = w;
@@ -164,6 +179,7 @@ export function BulkImageUploadModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<FileRow[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [removeBg, setRemoveBg] = useState(true);
   const [phase, setPhase] = useState<'review' | 'uploading' | 'done'>('review');
   const [progress, setProgress] = useState(0);
   const [summary, setSummary] = useState<{ ok: number; skipped: number; failed: number }>({ ok: 0, skipped: 0, failed: 0 });
@@ -324,7 +340,7 @@ export function BulkImageUploadModal({
         let ext = row.file.name.split('.').pop()?.toLowerCase() ?? 'png';
         let mime = row.file.type;
         try {
-          uploadBlob = await normalizeImage(row.file);
+          uploadBlob = await normalizeImage(row.file, removeBg);
           ext = 'webp';
           mime = 'image/webp';
         } catch {
@@ -404,6 +420,16 @@ export function BulkImageUploadModal({
 
         {phase === 'review' && (
           <>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-white/70">
+              <input
+                type="checkbox"
+                checked={removeBg}
+                onChange={(e) => setRemoveBg(e.target.checked)}
+                className="h-4 w-4 accent-yellow-400"
+              />
+              <span>{dir === 'rtl' ? 'إزالة الخلفية تلقائياً' : 'Remove background automatically'}</span>
+            </label>
+
             <div
               onDragOver={(e) => {
                 e.preventDefault();
