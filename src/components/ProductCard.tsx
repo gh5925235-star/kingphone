@@ -51,7 +51,7 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
       href={href}
       className="group card flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-gold-300/30 hover:shadow-gold animate-fade-in"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-ink-900 bg-[radial-gradient(circle_at_50%_40%,rgba(43,114,220,0.10),transparent_65%)] p-6">
+      <div className="relative aspect-square w-full overflow-hidden bg-ink-900 bg-[radial-gradient(circle_at_50%_40%,rgba(215,25,32,0.06),transparent_65%)] p-6">
         <ProductImage
           imageUrl={product.image_url}
           brand={product.brand}
