@@ -7,32 +7,50 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Gamepad2,
+  Headphones,
+  Laptop,
   MessageCircle,
   Smartphone,
   Tablet,
-  Headphones,
   Watch,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useLang } from '@/context/LanguageContext';
 import { supabase, type Category, type Product } from '@/lib/supabase';
 import { pickName } from '@/lib/i18n';
+import { formatCurrency } from '@/lib/format';
 import { useSeo } from '@/components/Seo';
-import { ProductCard } from '@/components/ProductCard';
+import { ProductCard, ProductImage, monthlyInstallment, MIN_DOWN_PERCENT, MAX_MONTHS } from '@/components/ProductCard';
 import { SkeletonGrid, ErrorState } from '@/components/States';
 
-import type { LucideIcon } from 'lucide-react';
+// أيقونة القسم حسب اسم الـ slug
+function iconForCategory(slug: string): LucideIcon {
+  const s = slug.toLowerCase();
+  if (s.includes('play') || s.includes('game')) return Gamepad2;
+  if (s.includes('ipad') || s.includes('tab')) return Tablet;
+  if (s.includes('air') || s.includes('audio') || s.includes('head') || s.includes('sound')) return Headphones;
+  if (s.includes('watch')) return Watch;
+  if (s.includes('mac') || s.includes('laptop') || s.includes('book')) return Laptop;
+  return Smartphone;
+}
 
-const categoryIcons: Record<string, LucideIcon> = {
-  iphone: Smartphone,
-  ipad: Tablet,
-  airpods: Headphones,
-  accessories: Watch,
-};
+// ألوان فاتحة للمربعات (زي أقسام جرير)
+const TILE_COLORS = [
+  'bg-sky-100 text-sky-700',
+  'bg-rose-100 text-rose-700',
+  'bg-amber-100 text-amber-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-violet-100 text-violet-700',
+  'bg-slate-200 text-slate-700',
+];
 
 export function HomePage() {
   const { lang, t, dir } = useLang();
+  const isAr = lang === 'ar';
   const [categories, setCategories] = useState<Category[]>([]);
   const [featured, setFeatured] = useState<Product[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -49,7 +67,7 @@ export function HomePage() {
     (async () => {
       setLoading(true);
       setError(false);
-      const [catRes, featRes] = await Promise.all([
+      const [catRes, featRes, brandRes] = await Promise.all([
         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
         supabase
           .from('products')
@@ -57,6 +75,7 @@ export function HomePage() {
           .eq('is_active', true)
           .eq('is_featured', true)
           .order('created_at', { ascending: false }),
+        supabase.from('products').select('brand').eq('is_active', true),
       ]);
       if (!active) return;
       if (catRes.error || featRes.error) {
@@ -64,6 +83,12 @@ export function HomePage() {
       } else {
         setCategories(catRes.data as Category[]);
         setFeatured(featRes.data as Product[]);
+      }
+      if (!brandRes.error && brandRes.data) {
+        const uniq = Array.from(
+          new Set((brandRes.data as { brand: string | null }[]).map((r) => (r.brand ?? '').trim()).filter(Boolean)),
+        );
+        setBrands(uniq.slice(0, 10));
       }
       setLoading(false);
     })();
@@ -75,6 +100,11 @@ export function HomePage() {
   const Arrow = dir === 'rtl' ? ArrowLeft : ArrowRight;
   const NextIcon = dir === 'rtl' ? ChevronLeft : ChevronRight;
 
+  // المنتج اللي يظهر في البانر الرئيسي: أول منتج مميز له صورة
+  const hero = featured.find((p) => p.image_url) ?? null;
+  const heroName = hero ? pickName(lang, hero.name_ar, hero.name_en) : '';
+  const heroPrice = hero ? Number(hero.base_price || 0) : 0;
+
   const trustItems = [
     { icon: BadgeCheck, title: t('home.trust.genuine'), desc: t('home.trust.genuineDesc') },
     { icon: CreditCard, title: t('home.trust.installments'), desc: t('home.trust.installmentsDesc') },
@@ -83,45 +113,173 @@ export function HomePage() {
 
   return (
     <div>
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gold-soft opacity-60" />
-        <div className="absolute -top-24 start-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-gold-300/10 blur-3xl" />
-        <div className="container-page relative grid gap-10 py-16 lg:grid-cols-2 lg:py-24">
-          <div className="flex flex-col justify-center gap-6 animate-fade-in">
-            <span className="badge-gold w-fit">{t('home.installmentsBadge')}</span>
-            <h1 className="text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
-              <span className="text-gold-gradient">{t('home.heroTitle')}</span>
-            </h1>
-            <p className="max-w-xl text-lg text-white/70">{t('home.heroSubtitle')}</p>
-            <div className="flex flex-wrap gap-3">
-              <Link to="/c/iphone" className="btn-gold">
-                {t('cta.shopNow')} <Arrow size={18} />
-              </Link>
-              <Link to="/c/iphone" className="btn-ghost">
-                {t('cta.browseProducts')}
-              </Link>
+      {/* بانر رئيسي */}
+      <section className="container-page pt-4 sm:pt-6">
+        <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-tint-100 via-tint-50 to-ink-900 shadow-card">
+          <div className="absolute -end-20 -top-20 h-72 w-72 rounded-full bg-gold-300/10 blur-3xl" />
+          <div className="relative grid items-center gap-6 p-6 sm:p-10 lg:grid-cols-2 lg:p-14">
+            <div className="flex flex-col gap-5 animate-fade-in">
+              <span className="badge-gold w-fit">{t('home.installmentsBadge')}</span>
+              <h1 className="text-4xl font-extrabold leading-tight sm:text-5xl lg:text-6xl">
+                <span className="text-gold-gradient">{t('home.heroTitle')}</span>
+              </h1>
+              <p className="max-w-xl text-base text-white/70 sm:text-lg">{t('home.heroSubtitle')}</p>
+
+              {hero && heroPrice > 0 && (
+                <Link
+                  to={`/p/${hero.slug}`}
+                  className="w-fit rounded-2xl border border-white/10 bg-ink-900 px-5 py-3 shadow-card transition-transform hover:-translate-y-0.5"
+                >
+                  <span className="block text-xs text-white/50">{heroName}</span>
+                  <span className="flex flex-wrap items-baseline gap-x-3">
+                    <span className="text-2xl font-extrabold text-gold-300">
+                      {formatCurrency(heroPrice, lang)}
+                    </span>
+                    {hero.installment_enabled && (
+                      <span className="text-xs font-semibold text-gold-200">
+                        {isAr ? 'أو ' : 'or '}
+                        {formatCurrency(monthlyInstallment(heroPrice), lang)}
+                        {isAr ? ' شهرياً' : ' / month'}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                <Link to="/c/iphone" className="btn-gold">
+                  {t('cta.shopNow')} <Arrow size={18} />
+                </Link>
+                <Link to="/c/iphone" className="btn-ghost">
+                  {t('cta.browseProducts')}
+                </Link>
+              </div>
             </div>
-          </div>
-          <div className="relative hidden items-center justify-center lg:flex">
-            <div className="relative flex h-80 w-80 items-center justify-center rounded-full bg-gold-gradient shadow-gold-lg">
-              <img
-                src="/logo.png"
-                alt="King Phone"
-                className="h-full w-full rounded-full object-cover"
-                onError={(e) => ((e.currentTarget as HTMLImageElement).style.opacity = '0')}
-              />
-            </div>
-            <div className="absolute -end-4 top-8 rounded-2xl border border-white/10 bg-ink-800/80 p-4 backdrop-blur">
-              <p className="text-2xl font-bold text-gold-gradient">100%</p>
-              <p className="text-xs text-white/60">{t('home.trust.genuine')}</p>
+
+            <div className="flex items-center justify-center">
+              {hero ? (
+                <Link to={`/p/${hero.slug}`} className="block h-56 w-56 sm:h-72 sm:w-72 lg:h-96 lg:w-96">
+                  <ProductImage
+                    imageUrl={hero.image_url}
+                    brand={hero.brand}
+                    name={heroName}
+                    className="drop-shadow-[0_24px_28px_rgba(15,23,42,0.28)]"
+                  />
+                </Link>
+              ) : (
+                <div className="flex h-56 w-56 items-center justify-center rounded-full bg-gold-gradient shadow-gold-lg sm:h-72 sm:w-72">
+                  <img
+                    src="/logo.png"
+                    alt="King Phone"
+                    className="h-full w-full rounded-full object-cover"
+                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.opacity = '0')}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Trust strip */}
-      <section className="container-page -mt-6 grid gap-4 sm:grid-cols-3">
+      {/* بانرات التقسيط */}
+      <section className="container-page mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="card flex items-center gap-5 bg-tint-100 p-6">
+          <span className="text-6xl font-extrabold leading-none text-gold-300">{MAX_MONTHS}</span>
+          <div>
+            <p className="text-lg font-bold text-white">{isAr ? 'شهر تقسيط' : 'months installments'}</p>
+            <p className="text-sm text-white/60">
+              {isAr ? 'اختار المدة اللي تناسبك: 3 · 6 · 9 · 12' : 'Pick your plan: 3 · 6 · 9 · 12'}
+            </p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-5 bg-tint-100 p-6">
+          <span className="text-6xl font-extrabold leading-none text-gold-300">
+            {Math.round(MIN_DOWN_PERCENT * 100)}%
+          </span>
+          <div>
+            <p className="text-lg font-bold text-white">{isAr ? 'دفعة مقدمة فقط' : 'down payment only'}</p>
+            <p className="text-sm text-white/60">
+              {isAr ? 'والباقي على أقساط شهرية مريحة' : 'and the rest in easy monthly payments'}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* الأقسام */}
+      <section className="container-page mt-12">
+        <SectionHeader title={t('home.categoriesTitle')} subtitle={t('home.categoriesSubtitle')} />
+        {loading ? (
+          <SkeletonGrid count={4} />
+        ) : error ? (
+          <ErrorState />
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar sm:grid sm:grid-cols-4 sm:gap-4 lg:grid-cols-8">
+            {categories.map((c, i) => {
+              const Icon = iconForCategory(c.slug);
+              const name = pickName(lang, c.name_ar, c.name_en);
+              return (
+                <Link
+                  key={c.id}
+                  to={`/c/${c.slug}`}
+                  className="group flex w-28 shrink-0 flex-col items-center gap-3 sm:w-auto"
+                >
+                  <span
+                    className={`flex h-24 w-24 items-center justify-center rounded-2xl shadow-card transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-105 sm:h-28 sm:w-full ${TILE_COLORS[i % TILE_COLORS.length]}`}
+                  >
+                    <Icon size={38} />
+                  </span>
+                  <span className="text-center text-xs font-semibold leading-snug text-white">{name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* شريط الماركات */}
+      {brands.length > 0 && (
+        <section className="container-page mt-10">
+          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 rounded-2xl border border-white/5 bg-ink-900 px-6 py-5 shadow-card">
+            {brands.map((b) => (
+              <span key={b} className="text-lg font-extrabold uppercase tracking-wide text-white/35">
+                {b}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* منتجات مميزة */}
+      <section className="container-page mt-12">
+        <SectionHeader
+          title={t('home.featuredTitle')}
+          subtitle={t('home.featuredSubtitle')}
+          action={
+            <Link
+              to="/c/iphone"
+              className="flex items-center gap-1 text-sm font-semibold text-gold-200 hover:text-gold-300"
+            >
+              {t('cta.viewAll')} <NextIcon size={16} />
+            </Link>
+          }
+        />
+        {loading ? (
+          <SkeletonGrid count={4} />
+        ) : error ? (
+          <ErrorState />
+        ) : featured.length === 0 ? (
+          <p className="py-10 text-center text-white/50">{t('error.noProducts')}</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {featured.map((p) => (
+              <ProductCard key={p.id} product={p} lang={lang} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ليه كنج فون */}
+      <section className="container-page mt-12 grid gap-4 sm:grid-cols-3">
         {trustItems.map((item) => (
           <div
             key={item.title}
@@ -136,66 +294,6 @@ export function HomePage() {
             </div>
           </div>
         ))}
-      </section>
-
-      {/* Categories */}
-      <section className="container-page mt-16">
-        <SectionHeader title={t('home.categoriesTitle')} subtitle={t('home.categoriesSubtitle')} />
-        {loading ? (
-          <SkeletonGrid count={4} />
-        ) : error ? (
-          <ErrorState />
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {categories.map((c) => {
-              const Icon = categoryIcons[c.slug] || Smartphone;
-              const name = pickName(lang, c.name_ar, c.name_en);
-              return (
-                <Link
-                  key={c.id}
-                  to={`/c/${c.slug}`}
-                  className="group card flex flex-col items-center gap-4 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-gold-300/30 hover:shadow-gold animate-fade-in"
-                >
-                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gold-300/10 text-gold-300 transition-transform duration-300 group-hover:scale-110">
-                    <Icon size={30} />
-                  </span>
-                  <span className="text-sm font-semibold text-white">{name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Featured */}
-      <section className="container-page mt-16">
-        <SectionHeader
-          title={t('home.featuredTitle')}
-          subtitle={t('home.featuredSubtitle')}
-          action={
-            <Link
-              to="/c/iphone"
-              className="flex items-center gap-1 text-sm font-medium text-gold-200 hover:text-gold-100"
-            >
-              {t('cta.viewAll')} <NextIcon size={16} />
-            </Link>
-          }
-        />
-        {loading ? (
-          <SkeletonGrid count={4} />
-        ) : error ? (
-          <ErrorState />
-        ) : featured.length === 0 ? (
-          <p className="py-10 text-center text-white/50">{t('error.noProducts')}</p>
-        ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-            {featured.map((p) => (
-              <div key={p.id} className="w-64 shrink-0">
-                <ProductCard product={p} lang={lang} />
-              </div>
-            ))}
-          </div>
-        )}
       </section>
     </div>
   );
@@ -212,9 +310,12 @@ function SectionHeader({
 }) {
   return (
     <div className="mb-6 flex items-end justify-between gap-4">
-      <div>
-        <h2 className="text-2xl font-bold text-white">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-white/50">{subtitle}</p>}
+      <div className="flex items-center gap-3">
+        <span className="h-8 w-1.5 rounded-full bg-gold-gradient" />
+        <div>
+          <h2 className="text-2xl font-bold text-white">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-sm text-white/50">{subtitle}</p>}
+        </div>
       </div>
       {action}
     </div>
