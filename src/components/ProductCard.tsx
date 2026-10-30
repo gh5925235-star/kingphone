@@ -1,8 +1,17 @@
+import { useEffect, useState } from 'react';
 import { Crown } from 'lucide-react';
 import type { Product } from '@/lib/supabase';
 import type { Lang } from '@/lib/i18n';
 import { pickName, tr } from '@/lib/i18n';
 import { formatCurrency } from '@/lib/format';
+
+// تقدير القسط الشهري (زي صفحة المنتج): دفعة مقدمة 20% والباقي على 12 شهر.
+// لو غيّرت الشروط، عدّل الرقمين دول بس.
+export const MIN_DOWN_PERCENT = 0.2;
+export const MAX_MONTHS = 12;
+export function monthlyInstallment(price: number): number {
+  return (price * (1 - MIN_DOWN_PERCENT)) / MAX_MONTHS;
+}
 
 export function ProductImage({
   imageUrl,
@@ -15,18 +24,19 @@ export function ProductImage({
   name: string;
   className?: string;
 }) {
-  if (imageUrl) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [imageUrl]);
+
+  if (imageUrl && !failed) {
     return (
       <img
         src={imageUrl}
         alt={name}
         loading="lazy"
         className={`h-full w-full object-contain ${className}`}
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).style.display = 'none';
-          const fallback = (e.currentTarget.nextElementSibling as HTMLElement) || null;
-          if (fallback) fallback.style.display = 'flex';
-        }}
+        onError={() => setFailed(true)}
       />
     );
   }
@@ -45,13 +55,15 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
   const name = pickName(lang, product.name_ar, product.name_en);
   const href = `/p/${product.slug}`;
   const minPrice = Number(product.base_price || 0);
+  const isAr = lang === 'ar';
+  const showMonthly = product.installment_enabled && minPrice > 0;
 
   return (
     <a
       href={href}
       className="group card flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-gold-300/30 hover:shadow-gold animate-fade-in"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-ink-900 bg-[radial-gradient(circle_at_50%_40%,rgba(215,25,32,0.06),transparent_65%)] p-6">
+      <div className="relative aspect-square w-full overflow-hidden bg-gradient-to-b from-tint-50 to-tint-100 p-6">
         <ProductImage
           imageUrl={product.image_url}
           brand={product.brand}
@@ -68,14 +80,21 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
         <span className="text-[11px] font-medium uppercase tracking-wide text-white/40">
           {product.brand}
         </span>
-        <h3 className="line-clamp-2 text-sm font-semibold text-white">{name}</h3>
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold text-white">{name}</h3>
         <div className="mt-auto pt-3">
-          <span className="block text-[11px] text-white/40">
+          <span className="block text-[11px] text-white/45">
             {tr(lang, 'card.startingFrom')}
           </span>
-          <span className="text-base font-bold text-gold-gradient">
+          <span className="text-xl font-extrabold text-gold-300">
             {formatCurrency(minPrice, lang)}
           </span>
+          {showMonthly && (
+            <span className="mt-2 block rounded-lg bg-gold-50 px-2.5 py-1.5 text-[11px] font-semibold text-gold-200">
+              {isAr ? 'أو ' : 'or '}
+              {formatCurrency(monthlyInstallment(minPrice), lang)}
+              {isAr ? ' شهرياً' : ' / month'}
+            </span>
+          )}
         </div>
       </div>
     </a>
