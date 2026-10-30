@@ -2,13 +2,13 @@
 // ثيم فاتح: بدلنا قيم الألوان بس، فمفيش ملف تاني محتاج تعديل.
 // - ink = الخلفيات (بقت فاتحة)
 // - white = لون النصوص (بقى كحلي غامق)، فكل text-white في الموقع بقى غامق وواضح
-// - gold = لون التمييز (أزرق)
+// - gold = لون التمييز (أحمر على طريقة جرير)
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        white: '#0f172a',
+        white: '#16181d',
         ink: {
           950: '#f4f6fa',
           900: '#ffffff',
@@ -18,15 +18,20 @@ export default {
           500: '#d3dae6',
         },
         gold: {
-          50: '#eaf3ff',
-          100: '#d6e7ff',
-          200: '#1d5bb8',
-          300: '#2b72dc',
-          400: '#1d63c9',
-          500: '#1d5bb8',
-          600: '#17458c',
-          700: '#112f5f',
-          800: '#0c2244',
+          50: '#fff1f1',
+          100: '#ffdcdc',
+          200: '#c8161d',
+          300: '#d71920',
+          400: '#c01218',
+          500: '#a30f15',
+          600: '#870c12',
+          700: '#6b0a0e',
+          800: '#4f070a',
+        },
+        tint: {
+          50: '#f0f8f8',
+          100: '#e3f2f3',
+          200: '#d3ebed',
         },
       },
       fontFamily: {
@@ -34,13 +39,13 @@ export default {
         arabic: ['Cairo', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        gold: '0 0 0 1px rgba(43,114,220,0.35), 0 8px 24px rgba(43,114,220,0.15)',
-        'gold-lg': '0 8px 24px rgba(43,114,220,0.35)',
+        gold: '0 0 0 1px rgba(215,25,32,0.30), 0 8px 24px rgba(215,25,32,0.12)',
+        'gold-lg': '0 8px 24px rgba(215,25,32,0.30)',
         card: '0 8px 24px rgba(15,23,42,0.08)',
       },
       backgroundImage: {
-        'gold-gradient': 'linear-gradient(135deg, #3b8bf5 0%, #1d5bb8 100%)',
-        'gold-soft': 'linear-gradient(135deg, rgba(43,114,220,0.10) 0%, rgba(29,91,184,0.05) 100%)',
+        'gold-gradient': 'linear-gradient(135deg, #e5232b 0%, #b3121a 100%)',
+        'gold-soft': 'linear-gradient(135deg, rgba(215,25,32,0.08) 0%, rgba(179,18,26,0.04) 100%)',
         'surface-gradient': 'linear-gradient(180deg, #ffffff 0%, #f4f6fa 100%)',
       },
       keyframes: {
