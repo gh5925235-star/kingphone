@@ -35,7 +35,7 @@ export function ProductImage({
         src={imageUrl}
         alt={name}
         loading="lazy"
-        className={`h-full w-full object-contain ${className}`}
+        className={`h-full w-full object-contain mix-blend-multiply ${className}`}
         onError={() => setFailed(true)}
       />
     );
@@ -68,7 +68,7 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
           imageUrl={product.image_url}
           brand={product.brand}
           name={name}
-          className="drop-shadow-[0_14px_18px_rgba(15,23,42,0.22)] transition-transform duration-500 group-hover:scale-105"
+          className="transition-transform duration-500 group-hover:scale-105"
         />
         {product.installment_enabled && (
           <span className="absolute start-3 top-3 badge-gold">
