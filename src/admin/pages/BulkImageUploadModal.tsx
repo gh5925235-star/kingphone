@@ -1,13 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { UploadCloud, Loader2, CheckCircle2, X, ImageIcon, AlertTriangle } from 'lucide-react';
+import { UploadCloud, Loader2, CheckCircle2, X, ImageIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAdminLang } from '@/admin/lib/useAdminLang';
 import type { AdminProduct, AdminVariant } from '@/admin/lib/types';
 import { Modal } from '@/admin/components/ui';
 
+type VariantWithSlug = AdminVariant & { slug?: string };
+
 type MatchTarget =
   | { kind: 'product'; productId: string; variantId?: undefined }
-  | { kind: 'variant'; productId: string; variantId: string }
+  | { kind: 'variant'; productId: string; variantId: string; variantIds: string[] }
   | { kind: 'skip' };
 
 type FileRow = {
@@ -17,7 +19,6 @@ type FileRow = {
   target: MatchTarget;
   matchedLabel: string | null;
   status: 'pending' | 'uploading' | 'done' | 'error' | 'skipped';
-  errorMsg?: string;
 };
 
 const ACCEPTED = /\.(png|jpe?g|webp)$/i;
@@ -30,83 +31,67 @@ function colorNormalize(s: string): string {
   return s.toLowerCase().replace(/[\s\-_]+/g, '');
 }
 
-// ---------------------------------------------------------------------------
-// Image normalization: remove uniform background, crop to product, pad to
-// 1000x1000 on transparent canvas, output as WebP.
-// ---------------------------------------------------------------------------
-const OUT_SIZE = 1000;
-const OUT_PADDING = 0.08;
-const BG_TOLERANCE = 12; // was 38: too loose, leaked into light/silver products
-const BG_STEP = 5; // max color jump between neighbouring pixels while flooding
-const MAX_REMOVED = 0.7; // if more than 70% would be removed, assume it ate the product
 
-function colorDist(d: Uint8ClampedArray, i: number, r: number, g: number, b: number): number {
-  const dr = d[i] - r;
-  const dg = d[i + 1] - g;
-  const db = d[i + 2] - b;
-  return Math.sqrt(dr * dr + dg * dg + db * db);
+// ---------------------------------------------------------------------------
+// توحيد الصور تلقائياً قبل الرفع (من غير ما ناكل أي حاجة من الجهاز):
+// 1) نكتشف لون الخلفية من حواف الصورة
+// 2) نحوّل الخلفية لأبيض نقي (بدون مسح أي بكسل، فالجهاز الفضي/الأبيض سليم)
+// 3) نقص على حدود الجهاز ونحطه في مربع 1000x1000 بهامش ثابت
+// والموقع بيعرض الصور بـ mix-blend-multiply، فالأبيض بيختفي على أي خلفية فاتحة.
+// لو الصورة أصلاً شفافة (PNG) بنسيبها شفافة.
+// ---------------------------------------------------------------------------
+const OUT_SIZE = 1000; // مقاس الصورة النهائية (بكسل)
+const OUT_PADDING = 0.08; // الهامش حوالين الجهاز (8%)
+
+function median(arr: number[]): number {
+  const s = [...arr].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
 }
 
-function removeEdgeBackground(d: Uint8ClampedArray, w: number, h: number): void {
-  const at = (x: number, y: number) => (y * w + x) * 4;
-  const corners: [number, number][] = [
-    [0, 0],
-    [w - 1, 0],
-    [0, h - 1],
-    [w - 1, h - 1],
-  ];
-  if (corners.some(([x, y]) => d[at(x, y) + 3] < 250)) return;
+type Bg = { r: number; g: number; b: number };
 
-  const ref = at(0, 0);
-  const r = d[ref];
-  const g = d[ref + 1];
-  const b = d[ref + 2];
-  if (corners.some(([x, y]) => colorDist(d, at(x, y), r, g, b) > BG_TOLERANCE)) return;
-
-  const visited = new Uint8Array(w * h);
-  const stack: number[] = [];
-  const toClear: number[] = [];
-
-  const push = (x: number, y: number, from: number) => {
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    const p = y * w + x;
-    if (visited[p]) return;
-    if (colorDist(d, p * 4, r, g, b) > BG_TOLERANCE) return;
-    // do not cross gradients (the edge of the product)
-    if (from >= 0) {
-      const f = from * 4;
-      if (colorDist(d, p * 4, d[f], d[f + 1], d[f + 2]) > BG_STEP) return;
+// بيرجع: هل الصورة شفافة أصلاً؟ ولون الخلفية لو كانت موحدة وفاتحة
+function analyzeBorder(d: Uint8ClampedArray, w: number, h: number): { hasAlpha: boolean; bg: Bg | null } {
+  const step = Math.max(1, Math.floor(Math.min(w, h) / 60));
+  const idx: number[] = [];
+  for (let x = 0; x < w; x += step) {
+    idx.push(x);
+    idx.push((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y += step) {
+    idx.push(y * w);
+    idx.push(y * w + (w - 1));
+  }
+  let transparent = 0;
+  const rs: number[] = [];
+  const gs: number[] = [];
+  const bs: number[] = [];
+  for (const p of idx) {
+    const i = p * 4;
+    if (d[i + 3] < 200) {
+      transparent++;
+      continue;
     }
-    visited[p] = 1;
-    stack.push(p);
-  };
-
-  for (let x = 0; x < w; x++) {
-    push(x, 0, -1);
-    push(x, h - 1, -1);
+    rs.push(d[i]);
+    gs.push(d[i + 1]);
+    bs.push(d[i + 2]);
   }
-  for (let y = 0; y < h; y++) {
-    push(0, y, -1);
-    push(w - 1, y, -1);
-  }
+  if (rs.length === 0 || transparent / idx.length > 0.05) return { hasAlpha: true, bg: null };
 
-  while (stack.length) {
-    const p = stack.pop()!;
-    toClear.push(p);
-    const x = p % w;
-    const y = (p - x) / w;
-    push(x + 1, y, p);
-    push(x - 1, y, p);
-    push(x, y + 1, p);
-    push(x, y - 1, p);
+  const bg: Bg = { r: median(rs), g: median(gs), b: median(bs) };
+  const light = Math.min(bg.r, bg.g, bg.b) >= 190;
+  let close = 0;
+  for (let k = 0; k < rs.length; k++) {
+    const dr = rs[k] - bg.r;
+    const dg = gs[k] - bg.g;
+    const db = bs[k] - bg.b;
+    if (Math.sqrt(dr * dr + dg * dg + db * db) < 40) close++;
   }
-
-  // Safety: if most of the image would vanish, keep the original untouched.
-  if (toClear.length / (w * h) > MAX_REMOVED) return;
-  for (const p of toClear) d[p * 4 + 3] = 0;
+  const uniform = close / rs.length >= 0.85;
+  return { hasAlpha: false, bg: light && uniform ? bg : null };
 }
 
-async function normalizeImage(file: File, removeBg: boolean): Promise<Blob> {
+async function normalizeImage(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const shrink = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * shrink));
@@ -117,21 +102,44 @@ async function normalizeImage(file: File, removeBg: boolean): Promise<Blob> {
   work.height = h;
   const wctx = work.getContext('2d', { willReadFrequently: true })!;
   wctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
 
   const imgData = wctx.getImageData(0, 0, w, h);
-  if (removeBg) {
-    removeEdgeBackground(imgData.data, w, h);
+  const d = imgData.data;
+  const { hasAlpha, bg } = analyzeBorder(d, w, h);
+
+  if (bg) {
+    // نقسم كل قناة على لون الخلفية، فالخلفية بتبقى أبيض والجهاز يفضل زي ما هو
+    const kr = 255 / Math.max(bg.r, 1);
+    const kg = 255 / Math.max(bg.g, 1);
+    const kb = 255 / Math.max(bg.b, 1);
+    for (let i = 0; i < d.length; i += 4) {
+      const r = Math.min(255, d[i] * kr);
+      const g = Math.min(255, d[i + 1] * kg);
+      const b = Math.min(255, d[i + 2] * kb);
+      if (r >= 247 && g >= 247 && b >= 247) {
+        d[i] = 255;
+        d[i + 1] = 255;
+        d[i + 2] = 255;
+      } else {
+        d[i] = r;
+        d[i + 1] = g;
+        d[i + 2] = b;
+      }
+    }
     wctx.putImageData(imgData, 0, 0);
   }
 
-  const d = imgData.data;
+  // حدود الجهاز
+  const isContent = (i: number) =>
+    hasAlpha ? d[i + 3] > 20 : d[i] < 236 || d[i + 1] < 236 || d[i + 2] < 236;
   let minX = w;
   let minY = h;
   let maxX = -1;
   let maxY = -1;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (d[(y * w + x) * 4 + 3] > 20) {
+      if (isContent((y * w + x) * 4)) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
@@ -152,6 +160,10 @@ async function normalizeImage(file: File, removeBg: boolean): Promise<Blob> {
   out.width = OUT_SIZE;
   out.height = OUT_SIZE;
   const octx = out.getContext('2d')!;
+  if (!hasAlpha) {
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, OUT_SIZE, OUT_SIZE);
+  }
   octx.imageSmoothingQuality = 'high';
   const inner = OUT_SIZE * (1 - OUT_PADDING * 2);
   const k = Math.min(inner / cw, inner / ch);
@@ -171,7 +183,7 @@ export function BulkImageUploadModal({
   onDone,
 }: {
   products: AdminProduct[];
-  variants: AdminVariant[];
+  variants: VariantWithSlug[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -179,75 +191,86 @@ export function BulkImageUploadModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<FileRow[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [removeBg, setRemoveBg] = useState(true);
   const [phase, setPhase] = useState<'review' | 'uploading' | 'done'>('review');
   const [progress, setProgress] = useState(0);
   const [summary, setSummary] = useState<{ ok: number; skipped: number; failed: number }>({ ok: 0, skipped: 0, failed: 0 });
 
-  // Products sorted by slug length (longest first) so the longest-prefix
-  // match wins when multiple slugs could be a prefix of the file name.
-  const productsBySlugDesc = useMemo(
-    () => [...products].sort((a, b) => b.slug.length - a.slug.length),
-    [products],
-  );
-
-  // Map: product_id -> variants of that product
-  const variantsByProduct = useMemo(() => {
-    const m = new Map<string, AdminVariant[]>();
-    for (const v of variants) {
-      if (!m.has(v.product_id)) m.set(v.product_id, []);
-      m.get(v.product_id)!.push(v);
-    }
+  const slugMap = useMemo(() => {
+    const m = new Map<string, AdminProduct>();
+    for (const p of products) m.set(p.slug.toLowerCase(), p);
     return m;
-  }, [variants]);
+  }, [products]);
 
-  // Tolerant fallback: normalized product name -> product
   const normNameMap = useMemo(() => {
     const m = new Map<string, AdminProduct>();
     for (const p of products) m.set(normalize(p.name_en), p);
     return m;
   }, [products]);
 
+  // Map: productSlug -> colorEn(normalized) -> كل الـ variants بنفس اللون (كل السعات)
+  const variantColorMap = useMemo(() => {
+    const m = new Map<string, Map<string, VariantWithSlug[]>>();
+    for (const v of variants) {
+      const slug = (v.slug ?? '').toLowerCase();
+      if (!slug) continue;
+      if (!m.has(slug)) m.set(slug, new Map());
+      const colorMap = m.get(slug)!;
+      const key = colorNormalize(v.color_en);
+      if (!colorMap.has(key)) colorMap.set(key, []);
+      colorMap.get(key)!.push(v);
+    }
+    return m;
+  }, [variants]);
+
   const matchFile = useCallback(
     (file: File): { target: MatchTarget; label: string | null } => {
       const base = file.name.replace(/\.[^.]+$/, '');
       const lower = base.toLowerCase();
 
-      // Find the product whose slug is the longest prefix of the file name.
+      // Try color variant match: {slug}-{color}
+      // Find the longest product slug that is a prefix of the base name.
       let bestProduct: AdminProduct | null = null;
-      for (const p of productsBySlugDesc) {
+      let bestColor: string | null = null;
+      let bestVariants: VariantWithSlug[] | null = null;
+      for (const p of products) {
         const slug = p.slug.toLowerCase();
-        if (lower === slug || lower.startsWith(slug + '-')) {
-          bestProduct = p;
-          break; // already sorted longest-first
-        }
-      }
-
-      if (bestProduct) {
-        const slugLower = bestProduct.slug.toLowerCase();
-        // No remainder → product image
-        if (lower === slugLower) {
-          return { target: { kind: 'product', productId: bestProduct.id }, label: bestProduct.name_en };
-        }
-        // Remainder after the slug + '-' — try to match a variant color
-        const rest = base.slice(slugLower.length + 1);
-        const restNorm = colorNormalize(rest);
-        const productVariants = variantsByProduct.get(bestProduct.id);
-        if (productVariants) {
-          for (const v of productVariants) {
-            if (colorNormalize(v.color_en) === restNorm) {
-              return {
-                target: { kind: 'variant', productId: bestProduct.id, variantId: v.id },
-                label: `${bestProduct.name_en} · ${v.color_en}`,
-              };
+        if (lower === slug) continue; // exact product, not a variant
+        if (lower.startsWith(slug + '-')) {
+          const rest = base.slice(slug.length + 1);
+          const colorMap = variantColorMap.get(slug);
+          if (colorMap) {
+            for (const [cnorm, vs] of colorMap) {
+              if (cnorm === colorNormalize(rest)) {
+                if (!bestProduct || slug.length > bestProduct.slug.length) {
+                  bestProduct = p;
+                  bestColor = vs[0].color_en;
+                  bestVariants = vs;
+                }
+              }
             }
           }
         }
-        // Slug matched but color didn't — default to product image
-        return { target: { kind: 'product', productId: bestProduct.id }, label: bestProduct.name_en };
+      }
+      if (bestProduct && bestVariants) {
+        const vs: VariantWithSlug[] = bestVariants;
+        return {
+          target: {
+            kind: 'variant',
+            productId: bestProduct.id,
+            variantId: vs[0].id,
+            variantIds: vs.map((x) => x.id),
+          },
+          label: `${bestProduct.name_en} · ${bestColor}${vs.length > 1 ? ` (×${vs.length})` : ''}`,
+        };
       }
 
-      // Tolerant name match fallback
+      // Exact slug match
+      const bySlug = slugMap.get(lower);
+      if (bySlug) {
+        return { target: { kind: 'product', productId: bySlug.id }, label: bySlug.name_en };
+      }
+
+      // Tolerant name match
       const byName = normNameMap.get(normalize(base));
       if (byName) {
         return { target: { kind: 'product', productId: byName.id }, label: byName.name_en };
@@ -255,7 +278,7 @@ export function BulkImageUploadModal({
 
       return { target: { kind: 'skip' }, label: null };
     },
-    [productsBySlugDesc, variantsByProduct, normNameMap],
+    [products, slugMap, normNameMap, variantColorMap],
   );
 
   const addFiles = useCallback(
@@ -302,10 +325,20 @@ export function BulkImageUploadModal({
           const variantId = value.slice(2);
           const v = variants.find((vv) => vv.id === variantId);
           const p = products.find((pp) => pp.id === v?.product_id);
+          const siblings = v
+            ? variants.filter(
+                (x) => x.product_id === v.product_id && colorNormalize(x.color_en) === colorNormalize(v.color_en),
+              )
+            : [];
           return {
             ...r,
-            target: { kind: 'variant', productId: v!.product_id, variantId },
-            matchedLabel: v ? `${p?.name_en ?? ''} · ${v.color_en}` : null,
+            target: {
+              kind: 'variant',
+              productId: v!.product_id,
+              variantId,
+              variantIds: siblings.length ? siblings.map((x) => x.id) : [variantId],
+            },
+            matchedLabel: v ? `${p?.name_en ?? ''} · ${v.color_en}${siblings.length > 1 ? ` (×${siblings.length})` : ''}` : null,
           };
         }
         return r;
@@ -323,18 +356,6 @@ export function BulkImageUploadModal({
 
   const uploadable = rows.filter((r) => r.target.kind !== 'skip');
 
-  // Silver/white products blend with light backgrounds, so we never auto-remove
-  // their background (do it manually, then upload the already-transparent PNG).
-  const isSilverRow = (row: FileRow): boolean => {
-    const re = /silver|فضي/i;
-    let color = '';
-    if (row.target.kind === 'variant') {
-      const vid = row.target.variantId;
-      color = variants.find((v) => v.id === vid)?.color_en ?? '';
-    }
-    return re.test(color) || re.test(row.file.name);
-  };
-
   const onConfirm = async () => {
     const toUpload = rows.filter((r) => r.target.kind !== 'skip');
     if (toUpload.length === 0) return;
@@ -348,15 +369,16 @@ export function BulkImageUploadModal({
       const row = toUpload[i];
       setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: 'uploading' } : r)));
       try {
+        // توحيد الصورة (حجم + هامش + خلفية بيضا). لو فشل نرفع الأصلية.
         let uploadBlob: Blob = row.file;
         let ext = row.file.name.split('.').pop()?.toLowerCase() ?? 'png';
         let mime = row.file.type;
         try {
-          uploadBlob = await normalizeImage(row.file, removeBg && !isSilverRow(row));
+          uploadBlob = await normalizeImage(row.file);
           ext = 'webp';
           mime = 'image/webp';
         } catch {
-          /* fall back to original file */
+          /* نكمل بالصورة الأصلية */
         }
         const storagePath =
           row.target.kind === 'variant'
@@ -375,7 +397,7 @@ export function BulkImageUploadModal({
           const { error: vErr } = await supabase
             .from('product_variants')
             .update({ image_url: publicUrl })
-            .eq('id', row.target.variantId);
+            .in('id', row.target.variantIds);
           if (vErr) throw vErr;
         } else {
           const { error: pErr } = await supabase
@@ -387,10 +409,9 @@ export function BulkImageUploadModal({
 
         ok++;
         setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: 'done' } : r)));
-      } catch (e) {
+      } catch {
         failed++;
-        const msg = e instanceof Error ? e.message : String(e);
-        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: 'error', errorMsg: msg } : r)));
+        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: 'error' } : r)));
       }
       setProgress(Math.round(((i + 1) / toUpload.length) * 100));
     }
@@ -402,7 +423,6 @@ export function BulkImageUploadModal({
   };
 
   const canConfirm = uploadable.length > 0 && phase === 'review';
-  const failedRows = rows.filter((r) => r.status === 'error');
 
   return (
     <Modal
@@ -432,20 +452,6 @@ export function BulkImageUploadModal({
 
         {phase === 'review' && (
           <>
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-white/70">
-              <input
-                type="checkbox"
-                checked={removeBg}
-                onChange={(e) => setRemoveBg(e.target.checked)}
-                className="h-4 w-4 accent-yellow-400"
-              />
-              <span>
-                {dir === 'rtl'
-                  ? 'إزالة الخلفية تلقائياً (الفضي يتخطى تلقائياً)'
-                  : 'Remove background automatically (silver is skipped)'}
-              </span>
-            </label>
-
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -519,6 +525,10 @@ export function BulkImageUploadModal({
                                   <option value={`p:${p.id}`}>{t('bulk.productImage')}</option>
                                   {variants
                                     .filter((v) => v.product_id === p.id)
+                                    .filter(
+                                      (v, i, arr) =>
+                                        arr.findIndex((x) => colorNormalize(x.color_en) === colorNormalize(v.color_en)) === i,
+                                    )
                                     .map((v) => (
                                       <option key={v.id} value={`v:${v.id}`}>
                                         {t('bulk.variantColor', { color: v.color_en })}
@@ -574,25 +584,6 @@ export function BulkImageUploadModal({
                 })}
               </p>
             </div>
-
-            {failedRows.length > 0 && (
-              <div className="space-y-2 rounded-xl border border-red-400/20 bg-red-500/5 p-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-red-300">
-                  <AlertTriangle size={14} />
-                  <span>{failedRows.length} failed</span>
-                </div>
-                {failedRows.map((r) => (
-                  <div key={r.id} className="flex items-start gap-2 text-xs">
-                    <img src={r.preview} alt="" className="mt-0.5 h-6 w-6 shrink-0 rounded object-cover" />
-                    <div className="min-w-0">
-                      <div className="truncate text-white/60" dir="ltr">{r.file.name}</div>
-                      <div className="text-red-300/80" dir="ltr">{r.errorMsg}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="max-h-[30vh] overflow-y-auto scrollbar-thin">
               {rows.map((r) => (
                 <div
