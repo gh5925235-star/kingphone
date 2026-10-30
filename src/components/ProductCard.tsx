@@ -51,12 +51,12 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
       href={href}
       className="group card flex flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-gold-300/30 hover:shadow-gold animate-fade-in"
     >
-      <div className="relative aspect-square w-full overflow-hidden bg-ink-900 bg-[radial-gradient(circle_at_50%_40%,rgba(90,162,255,0.12),transparent_65%)] p-6">
+      <div className="relative aspect-square w-full overflow-hidden bg-ink-900 bg-[radial-gradient(circle_at_50%_40%,rgba(43,114,220,0.10),transparent_65%)] p-6">
         <ProductImage
           imageUrl={product.image_url}
           brand={product.brand}
           name={name}
-          className="drop-shadow-[0_12px_20px_rgba(0,0,0,0.55)] transition-transform duration-500 group-hover:scale-105"
+          className="drop-shadow-[0_14px_18px_rgba(15,23,42,0.22)] transition-transform duration-500 group-hover:scale-105"
         />
         {product.installment_enabled && (
           <span className="absolute start-3 top-3 badge-gold">
