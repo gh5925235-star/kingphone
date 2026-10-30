@@ -163,7 +163,7 @@ export function HomePage() {
                     imageUrl={hero.image_url}
                     brand={hero.brand}
                     name={heroName}
-                    className="drop-shadow-[0_24px_28px_rgba(15,23,42,0.28)]"
+                    className=""
                   />
                 </Link>
               ) : (
