@@ -1,27 +1,32 @@
 /** @type {import('tailwindcss').Config} */
+// ثيم فاتح: بدلنا قيم الألوان بس، فمفيش ملف تاني محتاج تعديل.
+// - ink = الخلفيات (بقت فاتحة)
+// - white = لون النصوص (بقى كحلي غامق)، فكل text-white في الموقع بقى غامق وواضح
+// - gold = لون التمييز (أزرق)
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
+        white: '#0f172a',
         ink: {
-          950: '#0a0a0a',
-          900: '#0e0e0e',
-          800: '#141414',
-          700: '#1c1c1c',
-          600: '#242424',
-          500: '#2e2e2e',
+          950: '#f4f6fa',
+          900: '#ffffff',
+          800: '#ffffff',
+          700: '#eef1f6',
+          600: '#e3e8f0',
+          500: '#d3dae6',
         },
         gold: {
           50: '#eaf3ff',
-          100: '#cfe3ff',
-          200: '#9fc8ff',
-          300: '#5aa2ff',
-          400: '#3b8bf5',
-          500: '#2b72dc',
-          600: '#1d5bb8',
-          700: '#17458c',
-          800: '#112f5f',
+          100: '#d6e7ff',
+          200: '#1d5bb8',
+          300: '#2b72dc',
+          400: '#1d63c9',
+          500: '#1d5bb8',
+          600: '#17458c',
+          700: '#112f5f',
+          800: '#0c2244',
         },
       },
       fontFamily: {
@@ -29,14 +34,14 @@ export default {
         arabic: ['Cairo', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        gold: '0 0 0 1px rgba(90,162,255,0.4), 0 8px 30px rgba(90,162,255,0.15)',
-        'gold-lg': '0 0 24px rgba(90,162,255,0.35)',
-        card: '0 10px 30px rgba(0,0,0,0.5)',
+        gold: '0 0 0 1px rgba(43,114,220,0.35), 0 8px 24px rgba(43,114,220,0.15)',
+        'gold-lg': '0 8px 24px rgba(43,114,220,0.35)',
+        card: '0 8px 24px rgba(15,23,42,0.08)',
       },
       backgroundImage: {
-        'gold-gradient': 'linear-gradient(135deg, #5aa2ff 0%, #1d5bb8 100%)',
-        'gold-soft': 'linear-gradient(135deg, rgba(90,162,255,0.12) 0%, rgba(29,91,184,0.06) 100%)',
-        'surface-gradient': 'linear-gradient(180deg, #141414 0%, #0e0e0e 100%)',
+        'gold-gradient': 'linear-gradient(135deg, #3b8bf5 0%, #1d5bb8 100%)',
+        'gold-soft': 'linear-gradient(135deg, rgba(43,114,220,0.10) 0%, rgba(29,91,184,0.05) 100%)',
+        'surface-gradient': 'linear-gradient(180deg, #ffffff 0%, #f4f6fa 100%)',
       },
       keyframes: {
         shimmer: {
