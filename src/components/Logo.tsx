@@ -9,7 +9,8 @@ const sizes: Record<Size, { box: string; icon: number; text: string; sub: string
   lg: { box: 'h-16 w-16', icon: 34, text: 'text-xl', sub: 'text-xs' },
 };
 
-// اللوجو بيتقرا من public/logo.png
+// اللوجو بيتقرا من public/logo.png (?v=2 عشان المتصفح ميستخدمش نسخة قديمة مخزّنة)
+// لو غيّرت صورة اللوجو بعد كده، غيّر الرقم v=2 لـ v=3
 // لو الملف مش موجود بيظهر التاج بدالو.
 export function Logo({ size = 'md', showText = true }: { size?: Size; showText?: boolean }) {
   const s = sizes[size];
@@ -24,9 +25,9 @@ export function Logo({ size = 'md', showText = true }: { size?: Size; showText?:
       >
         {hasImg ? (
           <img
-            src="/logo.png"
+            src="/logo.png?v=2"
             alt="King Phone"
-            className="h-full w-full object-contain p-1"
+            className="h-full w-full object-contain"
             onError={() => setHasImg(false)}
           />
         ) : (
