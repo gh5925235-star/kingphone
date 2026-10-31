@@ -19,9 +19,8 @@ import type { LucideIcon } from 'lucide-react';
 import { useLang } from '@/context/LanguageContext';
 import { supabase, type Category, type Product } from '@/lib/supabase';
 import { pickName } from '@/lib/i18n';
-import { formatCurrency } from '@/lib/format';
 import { useSeo } from '@/components/Seo';
-import { ProductCard, ProductImage, monthlyInstallment, MIN_DOWN_PERCENT, MAX_MONTHS } from '@/components/ProductCard';
+import { ProductCard, MIN_DOWN_PERCENT, MAX_MONTHS } from '@/components/ProductCard';
 import { SkeletonGrid, ErrorState } from '@/components/States';
 
 // أيقونة القسم حسب اسم الـ slug
@@ -100,11 +99,6 @@ export function HomePage() {
   const Arrow = dir === 'rtl' ? ArrowLeft : ArrowRight;
   const NextIcon = dir === 'rtl' ? ChevronLeft : ChevronRight;
 
-  // المنتج اللي يظهر في البانر الرئيسي: أول منتج مميز له صورة
-  const hero = featured.find((p) => p.image_url) ?? null;
-  const heroName = hero ? pickName(lang, hero.name_ar, hero.name_en) : '';
-  const heroPrice = hero ? Number(hero.base_price || 0) : 0;
-
   const trustItems = [
     { icon: BadgeCheck, title: t('home.trust.genuine'), desc: t('home.trust.genuineDesc') },
     { icon: CreditCard, title: t('home.trust.installments'), desc: t('home.trust.installmentsDesc') },
@@ -125,27 +119,6 @@ export function HomePage() {
               </h1>
               <p className="max-w-xl text-base text-white/70 sm:text-lg">{t('home.heroSubtitle')}</p>
 
-              {hero && heroPrice > 0 && (
-                <Link
-                  to={`/p/${hero.slug}`}
-                  className="w-fit rounded-2xl border border-white/10 bg-ink-900 px-5 py-3 shadow-card transition-transform hover:-translate-y-0.5"
-                >
-                  <span className="block text-xs text-white/50">{heroName}</span>
-                  <span className="flex flex-wrap items-baseline gap-x-3">
-                    <span className="text-2xl font-extrabold text-gold-300">
-                      {formatCurrency(heroPrice, lang)}
-                    </span>
-                    {hero.installment_enabled && (
-                      <span className="text-xs font-semibold text-gold-200">
-                        {isAr ? 'أو ' : 'or '}
-                        {formatCurrency(monthlyInstallment(heroPrice), lang)}
-                        {isAr ? ' شهرياً' : ' / month'}
-                      </span>
-                    )}
-                  </span>
-                </Link>
-              )}
-
               <div className="flex flex-wrap gap-3">
                 <Link to="/c/iphone" className="btn-gold">
                   {t('cta.shopNow')} <Arrow size={18} />
@@ -157,25 +130,13 @@ export function HomePage() {
             </div>
 
             <div className="flex items-center justify-center">
-              {hero ? (
-                <Link to={`/p/${hero.slug}`} className="block h-56 w-56 sm:h-72 sm:w-72 lg:h-96 lg:w-96">
-                  <ProductImage
-                    imageUrl={hero.image_url}
-                    brand={hero.brand}
-                    name={heroName}
-                    className=""
-                  />
-                </Link>
-              ) : (
-                <div className="flex h-56 w-56 items-center justify-center rounded-full bg-gold-gradient shadow-gold-lg sm:h-72 sm:w-72">
-                  <img
-                    src="/logo.png"
-                    alt="King Phone"
-                    className="h-full w-full rounded-full object-cover"
-                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.opacity = '0')}
-                  />
-                </div>
-              )}
+              <div className="h-56 w-56 overflow-hidden rounded-full bg-ink-900 shadow-card sm:h-72 sm:w-72 lg:h-96 lg:w-96">
+                <img
+                  src="/logo.png?v=2"
+                  alt="King Phone"
+                  className="h-full w-full object-cover"
+                />
+              </div>
             </div>
           </div>
         </div>
