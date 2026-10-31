@@ -60,6 +60,10 @@ export default {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(0)' },
         },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-12px)' },
+        },
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale(0.96)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
@@ -70,6 +74,7 @@ export default {
         'fade-in': 'fadeIn 0.4s ease-out both',
         'slide-in': 'slideIn 0.3s ease-out both',
         'scale-in': 'scaleIn 0.25s ease-out both',
+        float: 'float 4s ease-in-out infinite',
       },
     },
   },
