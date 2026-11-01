@@ -25,7 +25,16 @@ import { pickName, type Lang } from '@/lib/i18n';
 import { useSeo } from '@/components/Seo';
 import { ProductCard, MIN_DOWN_PERCENT, MAX_MONTHS } from '@/components/ProductCard';
 import { ErrorState } from '@/components/States';
-import { HOME_CONTENT, type L, type Offer, type OfferTheme, type Showcase, type Slide } from '@/config/homeContent';
+import { fetchHomeContent } from '@/lib/homeContentApi';
+import {
+  HOME_CONTENT,
+  type HomeContentData,
+  type L,
+  type Offer,
+  type OfferTheme,
+  type Showcase,
+  type Slide,
+} from '@/config/homeContent';
 
 // أيقونة القسم حسب اسم الـ slug
 function iconForCategory(slug: string): LucideIcon {
@@ -88,6 +97,7 @@ export function HomePage() {
   const [featured, setFeatured] = useState<Product[]>([]);
   const [latest, setLatest] = useState<Product[]>([]);
   const [brands, setBrands] = useState<string[]>([]);
+  const [content, setContent] = useState<HomeContentData>(HOME_CONTENT);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -104,7 +114,7 @@ export function HomePage() {
     (async () => {
       setLoading(true);
       setError(false);
-      const [catRes, featRes, latestRes, brandRes] = await Promise.all([
+      const [catRes, featRes, latestRes, brandRes, contentRes] = await Promise.all([
         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
         supabase
           .from('products')
@@ -119,8 +129,10 @@ export function HomePage() {
           .order('created_at', { ascending: false })
           .limit(10),
         supabase.from('products').select('brand').eq('is_active', true),
+        fetchHomeContent(),
       ]);
       if (!active) return;
+      setContent(contentRes);
       if (catRes.error || featRes.error) {
         setError(true);
       } else {
@@ -173,8 +185,8 @@ export function HomePage() {
   return (
     <div>
       {/* الشريط العلوي */}
-      <div className="bg-gold-gradient px-4 py-2 text-center text-xs font-semibold text-ink-950 sm:text-sm">
-        {pick(HOME_CONTENT.topBar)}
+      <div className="min-h-[2.25rem] bg-gold-gradient px-4 py-2 text-center text-xs font-semibold text-ink-950 sm:text-sm">
+        {!loading && pick(content.topBar)}
       </div>
 
       {/* الأقسام (فوق) */}
@@ -205,8 +217,11 @@ export function HomePage() {
 
       {/* بانر متحرك */}
       <section className="container-page mt-4">
+        {loading ? (
+          <div className="h-72 animate-pulse rounded-3xl bg-tint-200" />
+        ) : (
         <HeroCarousel
-          slides={HOME_CONTENT.slides}
+          slides={content.slides}
           dir={dir}
           pick={pick}
           brand={
@@ -231,11 +246,12 @@ export function HomePage() {
             </div>
           }
         />
+        )}
       </section>
 
       {/* بانر عريض */}
       <section className="container-page mt-4">
-        <StripBanner strip={HOME_CONTENT.strip} pick={pick} Icon={NextIcon} />
+        {!loading && <StripBanner strip={content.strip} pick={pick} Icon={NextIcon} />}
       </section>
 
       {/* الماركات */}
@@ -290,7 +306,8 @@ export function HomePage() {
           <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
             {categories.map((c) => {
               const Icon = iconForCategory(c.slug);
-              const discount = HOME_CONTENT.savingsDiscounts[c.slug];
+              const sv = content.savings[c.slug];
+              const discount = sv?.discount ? (isAr ? sv.discount.ar : sv.discount.en) : '';
               return (
                 <Link
                   key={c.id}
@@ -299,10 +316,14 @@ export function HomePage() {
                 >
                   <span className="text-xs font-bold text-white">{pickName(lang, c.name_ar, c.name_en)}</span>
                   <span className="flex h-24 w-full items-center justify-center text-gold-300 transition-transform group-hover:scale-110">
-                    <Icon size={56} strokeWidth={1.4} />
+                    {sv?.image ? (
+                      <img src={sv.image} alt="" className="h-full w-full object-contain" />
+                    ) : (
+                      <Icon size={56} strokeWidth={1.4} />
+                    )}
                   </span>
                   {discount ? (
-                    <span className="text-lg font-extrabold text-gold-300">{pick(discount)}</span>
+                    <span className="text-lg font-extrabold text-gold-300">{discount}</span>
                   ) : (
                     <span className="text-xs font-bold text-gold-300">{isAr ? 'اكتشف العروض' : 'See deals'}</span>
                   )}
@@ -315,7 +336,7 @@ export function HomePage() {
 
       {/* كروت العروض */}
       <section className="container-page mt-10 grid gap-4 md:grid-cols-2">
-        {HOME_CONTENT.offers.map((o: Offer, i: number) => (
+        {!loading && content.offers.map((o: Offer, i: number) => (
           <OfferCard key={i} offer={o} pick={pick} Icon={NextIcon} />
         ))}
       </section>
@@ -356,7 +377,7 @@ export function HomePage() {
           subtitle={isAr ? 'أحدث الأجهزة بشكل مختلف' : 'Our latest devices, up close'}
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          {HOME_CONTENT.showcases.map((s: Showcase, i: number) => {
+          {!loading && content.showcases.map((s: Showcase, i: number) => {
             const Icon = SHOWCASE_ICONS[s.icon];
             return (
               <Link
@@ -409,7 +430,7 @@ export function HomePage() {
       {/* لماذا كنج فون */}
       <section className="mt-12 bg-tint-50 py-10">
         <div className="container-page">
-          <SectionHeader title={pick(HOME_CONTENT.why.title)} subtitle={pick(HOME_CONTENT.why.subtitle)} />
+          <SectionHeader title={pick(content.why.title)} subtitle={pick(content.why.subtitle)} />
           <div className="grid gap-4 sm:grid-cols-3">
             {whyItems.map((item) => (
               <div

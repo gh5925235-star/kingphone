@@ -133,6 +133,11 @@ export function ProductPage() {
   }, [settings, months]);
 
   const price = selectedVariant?.price ?? product?.base_price ?? 0;
+  // السعر القديم: بنطبّق نفس نسبة الخصم بتاعة المنتج على سعر السعة/اللون المختار
+  const compareBase = Number((product as { compare_price?: number | string | null } | null)?.compare_price ?? 0);
+  const baseP = Number(product?.base_price ?? 0);
+  const oldPrice = compareBase > baseP && baseP > 0 ? price * (compareBase / baseP) : 0;
+  const discountPct = oldPrice > price ? Math.round((1 - price / oldPrice) * 100) : 0;
   const inStock = selectedVariant ? selectedVariant.stock > 0 : false;
 
   const minDownPercent = settings?.minDownPaymentPercent ?? 0;
@@ -245,6 +250,16 @@ export function ProductPage() {
               <span className="text-2xl font-bold text-gold-gradient">
                 {formatCurrency(product.base_price, lang, settings?.currency)}
               </span>
+            )}
+            {oldPrice > price && (
+              <>
+                <span className="text-lg text-white/40 line-through">
+                  {formatCurrency(oldPrice, lang, settings?.currency)}
+                </span>
+                <span className="rounded-md bg-gold-300 px-2 py-0.5 text-xs font-extrabold text-ink-950" dir="ltr">
+                  -{discountPct}%
+                </span>
+              </>
             )}
             {product.installment_enabled && (
               <span className="badge-gold">{t('card.installments')}</span>
