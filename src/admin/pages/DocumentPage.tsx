@@ -185,8 +185,8 @@ export function DocumentPage() {
           </h2>
           <p className="mb-3 text-[11px] text-white/35">
             {docLang === 'ar'
-              ? 'تُطبع في المستند فقط ولا تُحفظ في قاعدة البيانات.'
-              : 'Printed into the document only — not saved to the database.'}
+              ? 'كل بيانات العقد بتتعبّى تلقائي من الطلب. الخانات دي اختيارية لو عايز تغيّر حاجة في العقد ده بس (مش بتتحفظ).'
+              : 'All contract data is filled automatically from the order. These fields are optional overrides for this printout only (not saved).'}
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {fieldDefs.map((fd) => (
@@ -198,6 +198,7 @@ export function DocumentPage() {
                   onChange={(e) => setContractFields((prev) => ({ ...prev, [fd.key]: e.target.value }))}
                   className="input-field"
                   dir={docLang === 'ar' ? 'rtl' : 'ltr'}
+                  placeholder={fd.placeholder ?? ''}
                 />
               </div>
             ))}
