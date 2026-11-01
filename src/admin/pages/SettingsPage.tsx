@@ -4,6 +4,7 @@ import { useAdminLang } from '@/admin/lib/useAdminLang';
 import { useToasts } from '@/admin/lib/useToasts';
 import { fetchSettings, saveSettings, SETTINGS_FIELDS, type SettingsField } from '@/admin/lib/settingsApi';
 import type { AdminSettings } from '@/admin/lib/types';
+import { HomeContentEditor } from '@/admin/pages/HomeContentEditor';
 
 const GROUP_META: Record<
   SettingsField['group'],
@@ -44,13 +45,17 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'store' | 'home'>('store');
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
       const s = await fetchSettings();
-      setSettings(s);
+      // محتوى الصفحة الرئيسية بيتحفظ من تابه الخاص، فمنخلّطوش مع الإعدادات
+      const clean: AdminSettings = { ...s };
+      delete clean.home_content;
+      setSettings(clean);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -70,7 +75,9 @@ export function SettingsPage() {
   const onSave = async () => {
     setSaving(true);
     try {
-      await saveSettings(settings);
+      const clean: AdminSettings = { ...settings };
+      delete clean.home_content;
+      await saveSettings(clean);
       toasts.success(t('admin.success'));
     } catch (e) {
       toasts.error(e instanceof Error ? e.message : String(e));
@@ -78,6 +85,35 @@ export function SettingsPage() {
       setSaving(false);
     }
   };
+
+  const tabsEl = (
+    <div className="inline-flex overflow-hidden rounded-xl border border-white/10">
+      <button
+        type="button"
+        onClick={() => setTab('store')}
+        className={`px-4 py-2 text-xs font-semibold ${tab === 'store' ? 'bg-gold-300/15 text-gold-200' : 'bg-ink-800 text-white/50'}`}
+      >
+        {lang === 'ar' ? 'إعدادات المتجر' : 'Store settings'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setTab('home')}
+        className={`px-4 py-2 text-xs font-semibold ${tab === 'home' ? 'bg-gold-300/15 text-gold-200' : 'bg-ink-800 text-white/50'}`}
+      >
+        {lang === 'ar' ? 'الصفحة الرئيسية' : 'Home page'}
+      </button>
+    </div>
+  );
+
+  if (tab === 'home') {
+    return (
+      <div dir={dir} className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">{t('nav.settings')}</h1>
+        {tabsEl}
+        <HomeContentEditor />
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -100,6 +136,7 @@ export function SettingsPage() {
 
   return (
     <div dir={dir} className="space-y-6">
+      {tabsEl}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-white">{t('nav.settings')}</h1>
         <button onClick={onSave} disabled={saving} className="btn-gold px-4 py-2 text-xs">

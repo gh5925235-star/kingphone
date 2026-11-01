@@ -7,6 +7,7 @@ import {
   fetchProduct, upsertProduct, fetchVariants, upsertVariant, deleteVariant, fetchCategories,
 } from '@/admin/lib/ordersApi';
 import type { AdminProduct, AdminVariant, AdminCategory } from '@/admin/lib/types';
+import { supabase } from '@/lib/supabase';
 
 export function ProductEditPage() {
   const { id } = useParams();
@@ -29,6 +30,8 @@ export function ProductEditPage() {
     installment_enabled: true,
     category_id: null,
   });
+  // السعر القديم (قبل الخصم). بيتحفظ لوحده في عمود compare_price
+  const [comparePrice, setComparePrice] = useState('');
   const [variants, setVariants] = useState<AdminVariant[]>([]);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [loading, setLoading] = useState(!isNew);
@@ -51,6 +54,9 @@ export function ProductEditPage() {
       setProduct(p);
       setVariants(v);
       setCategories(cats);
+      const { data: cp } = await supabase.from('products').select('compare_price').eq('id', id!).maybeSingle();
+      const cv = (cp as { compare_price?: number | string | null } | null)?.compare_price;
+      setComparePrice(cv != null ? String(cv) : '');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -81,6 +87,12 @@ export function ProductEditPage() {
         base_price: Number(product.base_price || 0),
       } as Partial<AdminProduct> & { slug: string; name_ar: string; name_en: string; base_price: number; brand: string };
       const saved = await upsertProduct(payload);
+      const cmp = comparePrice.trim() === '' ? null : Number(comparePrice);
+      const { error: cmpErr } = await supabase
+        .from('products')
+        .update({ compare_price: cmp !== null && Number.isFinite(cmp) ? cmp : null })
+        .eq('id', saved.id);
+      if (cmpErr) toasts.error(`السعر القديم: ${cmpErr.message}`);
       toasts.success(t('admin.success'));
       if (isNew) {
         navigate(`/admin/products/${saved.id}`);
@@ -195,6 +207,14 @@ export function ProductEditPage() {
           </Field>
           <Field label={t('prod.basePrice')}>
             <input type="number" step="0.001" value={product.base_price ?? 0} onChange={(e) => setField('base_price', e.target.value)} className="input-field" dir="ltr" />
+          </Field>
+          <Field label={lang === 'ar' ? 'السعر القديم (قبل الخصم)' : 'Old price (before discount)'}>
+            <input type="number" step="0.001" min={0} value={comparePrice} onChange={(e) => setComparePrice(e.target.value)} className="input-field" dir="ltr" placeholder="0" />
+            <p className="mt-1 text-[11px] text-white/30">
+              {lang === 'ar'
+                ? 'لو كتبت رقم أكبر من السعر الأساسي، بيظهر مشطوب ومعاه نسبة الخصم. سيبه فاضي لو مفيش خصم.'
+                : 'If higher than the base price it shows crossed out with the discount %. Leave empty for no discount.'}
+            </p>
           </Field>
         </div>
 
