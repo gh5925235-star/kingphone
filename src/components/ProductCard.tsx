@@ -51,12 +51,17 @@ export function ProductImage({
   );
 }
 
+type PricedProduct = Product & { compare_price?: number | string | null };
+
 export function ProductCard({ product, lang }: { product: Product; lang: Lang }) {
   const name = pickName(lang, product.name_ar, product.name_en);
   const href = `/p/${product.slug}`;
   const minPrice = Number(product.base_price || 0);
   const isAr = lang === 'ar';
   const showMonthly = product.installment_enabled && minPrice > 0;
+  const compare = Number((product as PricedProduct).compare_price ?? 0);
+  const hasDiscount = minPrice > 0 && compare > minPrice;
+  const pct = hasDiscount ? Math.round((1 - minPrice / compare) * 100) : 0;
 
   return (
     <a
@@ -75,6 +80,14 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
             {tr(lang, 'card.installments')}
           </span>
         )}
+        {hasDiscount && (
+          <span
+            className="absolute end-3 top-3 rounded-md bg-gold-300 px-2 py-0.5 text-[11px] font-extrabold text-ink-950"
+            dir="ltr"
+          >
+            -{pct}%
+          </span>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-1 p-4">
         <span className="text-[11px] font-medium uppercase tracking-wide text-white/40">
@@ -85,9 +98,18 @@ export function ProductCard({ product, lang }: { product: Product; lang: Lang })
           <span className="block text-[11px] text-white/45">
             {tr(lang, 'card.startingFrom')}
           </span>
+          {hasDiscount && (
+            <span className="block text-xs text-white/40 line-through">{formatCurrency(compare, lang)}</span>
+          )}
           <span className="text-xl font-extrabold text-gold-300">
             {formatCurrency(minPrice, lang)}
           </span>
+          {hasDiscount && (
+            <span className="mt-1 block text-[11px] font-semibold text-emerald-600">
+              {isAr ? 'وفّرت ' : 'You save '}
+              {formatCurrency(compare - minPrice, lang)}
+            </span>
+          )}
           {showMonthly && (
             <span className="mt-2 block rounded-lg bg-gold-50 px-2.5 py-1.5 text-[11px] font-semibold text-gold-200">
               {isAr ? 'أو ' : 'or '}
