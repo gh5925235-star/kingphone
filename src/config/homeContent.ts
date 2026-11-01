@@ -61,17 +61,21 @@ export type Strip = {
   theme: OfferTheme;
 };
 
-export const HOME_CONTENT: {
+// كارت الخصم لكل قسم (بالـ slug بتاعه): نص الخصم + صورة اختيارية
+export type SavingCard = { discount?: L; image?: string };
+
+export type HomeContentData = {
   topBar: L;
   slides: Slide[];
   strip: Strip;
-  // خصم كل قسم (بالـ slug بتاعه). لو القسم مش هنا بيظهر "اكتشف العروض".
-  // مثال: iphone: { ar: 'حتى 10%', en: 'Up to 10%' }
-  savingsDiscounts: Record<string, L>;
+  savings: Record<string, SavingCard>;
   offers: Offer[];
   showcases: Showcase[];
   why: { title: L; subtitle: L };
-} = {
+};
+
+// القيم الافتراضية. بعد كده تقدر تعدّل كل ده من الأدمن ← الإعدادات ← الصفحة الرئيسية
+export const HOME_CONTENT: HomeContentData = {
   topBar: {
     ar: 'منتجات أصلية 100% · تقسيط ميسر · دعم سريع عبر واتساب',
     en: '100% genuine products · Easy installments · Fast WhatsApp support',
@@ -115,7 +119,7 @@ export const HOME_CONTENT: {
     theme: 'navy',
   },
 
-  savingsDiscounts: {},
+  savings: {}, // مثال: iphone: { discount: { ar: 'حتى 10%', en: 'Up to 10%' }, image: '/offers/iphone.png' }
 
   offers: [
     {
